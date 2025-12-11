@@ -97,15 +97,8 @@ jobs:
         libmpc-dev \  
         texinfo \  
         libncurses5-dev \  
-        nano \  
-        vim \  
         gperf \  
         python3-docutils \  
-        unzip \  
-        curl \  
-        fakeroot \  
-        kmod \  
-        cpio \  
         wget  
           
     - name: 缓存工具链  
@@ -130,7 +123,7 @@ jobs:
         key: build-${{ github.event.inputs.production }}-${{ github.run_id }}  
         restore-keys: |  
           build-${{ github.event.inputs.production }}-  
-      
+            
     - name: 下载源码  
       run: |  
         echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV  
@@ -144,7 +137,6 @@ jobs:
       if: steps.cache-toolchain.outputs.cache-hit != 'true'  
       run: |  
         cd $RT_N56U/toolchain-mipsel  
-          
         # 创建修复补丁  
         cat > patches/gcc-4.4.7/999-fix-log2-redefinition.patch << 'EOF'  
 --- a/gcc/toplev.h  
@@ -158,27 +150,24 @@ jobs:
    
  #endif /* ! GCC_TOPLEV_H */  
 EOF  
-          
         # 完全禁用所有警告  
         sed -i 's/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security"/HOSTCFLAGS="$HOSTCFLAGS -w"/g' build_toolchain  
         sh build_toolchain > /dev/null  
           
     - name: 清理以前的编译  
-      if: github.event.inputs.clean_build == 'yes'  
+      if: ${{ github.event.inputs.clean_build == 'yes' }}  
       run: |  
-        cd $TRUNK  
-        rm -rf images/* romfs/* > /dev/null 2>&1 || true  
+        cd $RT_N56U/trunk  
+        rm -rf images/* romfs/* 2>/dev/null || true  
           
     - name: 开始编译  
       run: |  
         cd $TRUNK  
+          
         if [ -n "${{ github.event.inputs.production }}" ]; then  
           # 检查设备配置是否存在  
           if [ -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then  
             echo "Building device: ${{ github.event.inputs.production }}"  
-              
-            # 设置设备配置  
-            export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"  
               
             # 如果是缓存恢复，跳过清理步骤  
             if [ "${{ steps.cache-build.outputs.cache-hit }}" = "true" ]; then  
@@ -196,7 +185,7 @@ EOF
               exit 1  
             fi  
           else  
-            echo "Device configuration not found for ${{ github.event.inputs.production }}"  
+            echo "Device ${{ github.event.inputs.production }} not found"  
             echo "Available devices:"  
             ls configs/boards/  
             exit 1  
