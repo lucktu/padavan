@@ -80,40 +80,39 @@ jobs:
       run: |  
         sudo apt-get update  
         sudo apt install -y \  
-        git \  
-        build-essential \  
-        gawk \  
-        pkg-config \  
-        gettext \  
-        automake \  
-        autoconf \  
-        autopoint \  
-        libtool \  
-        bison \  
-        flex \  
-        zlib1g-dev \  
-        libgmp3-dev \  
-        libmpfr-dev \  
-        libmpc-dev \  
-        texinfo \  
-        mc \  
-        libncurses5-dev \  
-        nano \  
-        vim \  
-        gperf \  
-        python3-docutils \  
-        unzip \  
-        curl \  
-        fakeroot \  
-        kmod \  
-        cpio \  
-        wget  
-          
+          git \  
+          build-essential \  
+          gawk \  
+          pkg-config \  
+          gettext \  
+          automake \  
+          autoconf \  
+          autopoint \  
+          libtool \  
+          bison \  
+          flex \  
+          zlib1g-dev \  
+          libgmp3-dev \  
+          libmpfr-dev \  
+          libmpc-dev \  
+          texinfo \  
+          libncurses5-dev \  
+          nano \  
+          vim \  
+          gperf \  
+          python3-docutils \  
+          fakeroot \  
+          kmod \  
+          cpio \  
+          wget \  
+          unzip \  
+          xxd \  
+          curl  
+            
     - name: 设置环境变量  
       run: |  
         echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV  
         echo "NAME=Padavan-${{ github.event.inputs.production }}" >> $GITHUB_ENV  
-        mkdir -p $IMAGES  
           
     - name: 缓存工具链  
       uses: actions/cache@v3  
@@ -138,6 +137,7 @@ jobs:
             
     - name: 下载源码  
       run: |  
+        mkdir -p $IMAGES  
         echo 开始编译时间： >> $IMAGES/readme.txt  
         TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt  
         git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null  
@@ -166,14 +166,14 @@ EOF
     - name: 清理以前的编译（如果选择）  
       if: github.event.inputs.clean_build == 'yes'  
       run: |  
-        cd $TRUNK  
-        rm -rf images/ romfs/  
+        cd $RT_N56U/trunk  
+        rm -rf images/* romfs/* || true  
           
-    - name: 开始编译  
+    - name: 开始编译固件  
       run: |  
+        cd $TRUNK  
+          
         if [ -n "${{ github.event.inputs.production }}" ]; then  
-          cd $TRUNK  
-            
           # 检查设备配置是否存在  
           if [ ! -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then  
             echo "Device configuration not found: ${{ github.event.inputs.production }}"  
@@ -183,11 +183,9 @@ EOF
           # 设置设备配置  
           export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"  
             
-          # 根据缓存状态决定是否清理  
-          if [ "${{ steps.cache-build.outputs.cache-hit }}" == "true" ]; then  
-            echo "Using cached build, skipping clear_tree"  
-          else  
-            sudo ./clear_tree || echo  
+          # 如果缓存命中，跳过清理  
+          if [ "${{ steps.cache-build.outputs.cache-hit }}" != "true" ]; then  
+            ./clear_tree_simple >/dev/null 2>&1 || true  
           fi  
             
           # 编译固件  
@@ -202,7 +200,7 @@ EOF
           echo "No device selected, please select a device model"  
           exit 1  
         fi  
-            
+          
     - name: 收集信息  
       run: |  
         cd $IMAGES  
@@ -242,4 +240,3 @@ EOF
         files: ${{ env.IMAGES }}/*  
       env:  
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
