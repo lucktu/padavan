@@ -79,26 +79,16 @@ jobs:
     - name: 初始环境设置  
       run: |  
         sudo apt-get update  
-        sudo apt install -y \  
-        git \  
-        build-essential \  
-        gawk \  
-        pkg-config \  
-        gettext \  
-        automake \  
-        autoconf \  
-        autopoint \  
-        libtool \  
-        bison \  
-        flex \  
-        zlib1g-dev \  
-        libgmp3-dev \  
-        libmpfr-dev \  
-        libmpc-dev \  
-        texinfo \  
-        libncurses5-dev \  
-        gperf \  
-        python3-docutils  
+        sudo apt install -y git build-essential gawk pkg-config gettext \  
+        automake autoconf autopoint libtool bison flex zlib1g-dev \  
+        libgmp3-dev libmpfr-dev libmpc-dev texinfo libncurses5-dev \  
+        nano vim gperf python3-docutils fakeroot kmod cpio wget  
+          
+    - name: 设置环境变量  
+      run: |  
+        echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV  
+        echo "NAME=Padavan-${{ github.event.inputs.production }}" >> $GITHUB_ENV  
+        mkdir -p $IMAGES  
           
     - name: 缓存工具链  
       uses: actions/cache@v3  
@@ -106,7 +96,7 @@ jobs:
         path: |  
           /opt/rt-n56u/toolchain-mipsel  
           /opt/rt-n56u/dl  
-        key: toolchain-${{ runner.os }}-${{ hashFiles('**/toolchain-mipsel/*') }}  
+        key: toolchain-${{ runner.os }}-${{ hashFiles('**/build_toolchain') }}  
         restore-keys: |  
           toolchain-${{ runner.os }}-  
             
@@ -123,18 +113,12 @@ jobs:
             
     - name: 下载源码  
       run: |  
-        echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV  
-        echo "NAME=Padavan-${{ github.event.inputs.production }}" >> $GITHUB_ENV  
-        mkdir -p $IMAGES  
-        echo 开始编译时间： >> $IMAGES/readme.txt  
-        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt  
-        git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null  
+        git clone ${{ github.event.inputs.cloneurl }} $RT_N56U  
           
     - name: 构建工具链（如果缓存未命中）  
       if: steps.cache-toolchain.outputs.cache-hit != 'true'  
       run: |  
         cd $RT_N56U/toolchain-mipsel  
-          
         # 创建修复补丁  
         cat > patches/gcc-4.4.7/999-fix-log2-redefinition.patch << 'EOF'  
 --- a/gcc/toplev.h  
@@ -148,7 +132,6 @@ jobs:
    
  #endif /* ! GCC_TOPLEV_H */  
 EOF  
-          
         # 完全禁用所有警告  
         sed -i 's/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security"/HOSTCFLAGS="$HOSTCFLAGS -w"/g' build_toolchain  
         sh build_toolchain > /dev/null  
@@ -156,8 +139,8 @@ EOF
     - name: 清理以前的编译（如果选择）  
       if: github.event.inputs.clean_build == 'yes'  
       run: |  
-        cd $RT_N56U/trunk  
-        rm -rf images/* romfs/* || echo  
+        cd $TRUNK  
+        rm -rf images/ romfs/  
           
     - name: 开始编译  
       run: |  
@@ -167,12 +150,13 @@ EOF
           # 检查设备配置是否存在  
           if [ ! -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then  
             echo "Device configuration not found: ${{ github.event.inputs.production }}"  
-            echo "Available devices:"  
-            ls configs/boards/ | head -20  
             exit 1  
           fi  
             
-          # 如果是缓存恢复，跳过清理步骤  
+          # 设置设备配置  
+          export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"  
+            
+          # 检查是否使用缓存的编译  
           if [ "${{ steps.cache-build.outputs.cache-hit }}" = "true" ]; then  
             echo "Using cached build, skipping clear_tree"  
           else  
@@ -231,3 +215,4 @@ EOF
         files: ${{ env.IMAGES }}/*  
       env:  
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
