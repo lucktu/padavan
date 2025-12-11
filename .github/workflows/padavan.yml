@@ -47,113 +47,78 @@ on:
         description: 设置源码地址：  
         required: false  
         default: "https://github.com/lucktu/padavan.git"  
-      clean_build:  
-        description: 是否清理以前的编译：  
-        required: false  
-        default: 'yes'  
-        type: choice  
-        options:  
-          - 'yes'  
-          - 'no'  
       release:  
         description: 是否发布到Release？  
-        required: false  
         default: 'no'  
-        type: choice  
-        options:  
-          - 'no'  
-          - 'yes'  
+        required: false  
   
 env:  
   IMAGES: /opt/images  
   RT_N56U: /opt/rt-n56u  
-  TRUNK: /opt/rt-n56u/trunk  
   
 jobs:  
   build:  
     name: build  
-    runs-on: ubuntu-latest  
+    runs-on: ubuntu-20.04  
+      
     steps:  
-      - name: 设置环境变量  
-        run: |  
-          echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV  
-          echo "NAME=Padavan-${{ github.event.inputs.production }}" >> $GITHUB_ENV  
+    - name: 检出代码  
+      uses: actions/checkout@v4  
         
-      - name: 检出代码  
-        uses: actions/checkout@v4  
+    - name: 设置环境变量  
+      run: |  
+        echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV  
+        echo "NAME=Padavan-${{ github.event.inputs.production }}" >> $GITHUB_ENV  
+          
+    - name: 创建镜像目录  
+      run: |  
+        mkdir -p $IMAGES  
+          
+    - name: 下载源码  
+      run: |  
+        git clone ${{ github.event.inputs.cloneurl }} $RT_N56U  
+          
+    - name: 使用 Docker 编译固件  
+      run: |  
+        docker run --rm -v ${{ github.workspace }}:/opt/rt-n56u lucktu/padavan:latest ./build_firmware_ci ${{ github.event.inputs.production }}  
+          
+    - name: 整理固件文件  
+      run: |  
+        cd $IMAGES  
+        echo 编译完成时间： >> readme.txt  
+        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> readme.txt  
+        echo >> readme.txt  
+        echo 源码信息： >> readme.txt  
+        echo "源码地址: ${{ github.event.inputs.cloneurl }}" >> readme.txt  
+        pushd $RT_N56U  
+        git log -1 --format="%H %s" >> $IMAGES/readme.txt  
+        popd  
+        echo >> readme.txt  
+        echo md5校验值： >> readme.txt  
+        for m in *.trx  
+        do  
+          mv -fv "$m" "${m%.*}_${{ env.DATE }}.trx"  
+        done  
+        md5sum *.trx >> readme.txt || echo  
+        ls -l  
+          
+    - name: 上传固件到Artifacts  
+      if: true  
+      uses: actions/upload-artifact@v4  
+      with:  
+        name: ${{ env.NAME }}  
+        path: ${{ env.IMAGES }}  
+          
+    - name: 发布固件到Release  
+      if: ${{ github.event.inputs.release == 'yes' }}  
+      uses: softprops/action-gh-release@v1  
+      with:  
+        name: ${{ env.NAME }}  
+        tag_name: ${{ env.DATE }}  
+        body_path: ${{ env.IMAGES }}/readme.txt  
+        draft: false  
+        prerelease: false  
+        files: ${{ env.IMAGES }}/*  
+      env:  
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
-      - name: 构建Docker镜像  
-        run: |  
-          docker build -t padavan-builder .  
-        
-      - name: 创建工作目录  
-        run: |  
-          mkdir -p $IMAGES  
-          mkdir -p $RT_N56U  
-        
-      - name: 下载源码  
-        run: |  
-          docker run --rm \  
-            -v ${{ github.workspace }}$RT_N56U:$RT_N56U \  
-            padavan-builder \  
-            git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U  
-        
-      - name: 清理以前的编译  
-        if: ${{ github.event.inputs.clean_build == 'yes' }}  
-        run: |  
-          docker run --rm \  
-            -v ${{ github.workspace }}$RT_N56U:$RT_N56U \  
-            padavan-builder \  
-            sh -c "cd $RT_N56U/trunk && rm -rf images romfs"  
-        
-      - name: 编译固件  
-        run: |  
-          docker run --rm \  
-            -v ${{ github.workspace }}$RT_N56U:$RT_N56U \  
-            -v ${{ github.workspace }}$IMAGES:$IMAGES \  
-            padavan-builder \  
-            sh -c "cd $RT_N56U/trunk && \  
-              export CONFIG_FIRMWARE_PRODUCT_ID='${{ github.event.inputs.production }}' && \  
-              ./build_firmware_ci '${{ github.event.inputs.production }}'"  
-        
-      - name: 整理固件文件  
-        if: ${{ success() }}  
-        run: |  
-          cd $IMAGES  
-          echo 编译完成时间： >> readme.txt  
-          TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> readme.txt  
-          echo >> readme.txt  
-          echo 源码信息： >> readme.txt  
-          echo "源码地址: ${{ github.event.inputs.cloneurl }}" >> readme.txt  
-          docker run --rm \  
-            -v ${{ github.workspace }}$RT_N56U:$RT_N56U \  
-            padavan-builder \  
-            sh -c "cd $RT_N56U && git log -1 --format='%H %s'" >> $IMAGES/readme.txt  
-          echo >> readme.txt  
-          echo md5校验值： >> readme.txt  
-          for m in *.trx  
-          do  
-            mv -fv "$m" "${m%.*}_${{ env.DATE }}.trx"  
-          done  
-          md5sum *.trx >> readme.txt || echo  
-          ls -l  
-        
-      - name: 上传固件到Artifacts  
-        if: true  
-        uses: actions/upload-artifact@v4  
-        with:  
-          name: ${{ env.NAME }}  
-          path: ${{ env.IMAGES }}  
-        
-      - name: 发布固件到Release  
-        if: ${{ github.event.inputs.release == 'yes' }}  
-        uses: softprops/action-gh-release@v1  
-        with:  
-          name: ${{ env.NAME }}  
-          tag_name: ${{ env.DATE }}  
-          body_path: ${{ env.IMAGES }}/readme.txt  
-          draft: false  
-          prerelease: false  
-          files: ${{ env.IMAGES }}/*  
-        env:  
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
