@@ -1,172 +1,158 @@
-name: Compile padavan
-
-# Controls when the action will run.
-on:
-  workflow_dispatch:
-    inputs:
-      production:
-        description: 'Select specific device model to build (leave empty to build all)'
-        required: false
-        default: 'KFRouter-S1'
-        type: choice
-        options:
-          - ''
-          - 360P2
-          - 5K-W20
-          - A3004NS
-          - B70
-          - CR660x
-          - DIR-878
-          - DIR-882
-          - HC5661A
-          - HC5761A
-          - HC5861B
-          - JCG-836PRO
-          - JCG-AC860M
-          - JCG-Y2
-          - K2P_nano
-          - K2P
-          - KFRouter-S1
-          - MI-3
-          - MI-MINI
-          - MI-NANO
-          - MI-R3G
-          - MSG1500
-          - MZ-R13
-          - MZ-R13P
-          - NEWIFI3
-          - NEWIFI-MINI
-          - Oray-D1509
-          - OYE-001
-          - PSG1208
-          - PSG1218
-          - RM2100
-          - WR1200JS
-          - XY-C1
-          - Youku-L1
-      cloneurl:
-        description: 'Set source code address'
-        required: false
-        default: 'https://github.com/lucktu/padavan.git'
-      debug_enabled:
-        description: 'Run the build with tmate debugging enabled'
-        required: false
-        default: 'no'
-        type: choice
-        options:
-          - 'no'
-          - 'yes'
-      release:
-        description: 'Upload to Releases?'
-        required: false
-        default: 'no'
-        type: choice
-        options:
-          - 'no'
-          - 'yes'
-
-jobs:
-  build:
-    name: build
-    runs-on: ubuntu-22.04
-    env:
-      build_variant: ${{ matrix.build_variant }}
-      targets: ${{ matrix.targets }}
-      selected_device: ${{ github.event.inputs.production || '' }}
-      clone_url: ${{ github.event.inputs.cloneurl }}
-      upload_release: ${{ github.event.inputs.release }}
-      images_dir: /opt/images
-    strategy:
-      matrix:
-        include:
-          - build_variant: "mt7620"
-            targets: "PSG1208 PSG1218 NEWIFI-MINI MI-MINI MI-3 OYE-001 5K-W20"
-          - build_variant: "mt7628"
-            targets: "HC5861B MI-NANO MZ-R13 MZ-R13P 360P2 HC5761A HC5661A"
-          - build_variant: "mt7621"
-            targets: "K2P_nano K2P DIR-878 RM2100 CR660x"
-          - build_variant: "mt7621-usb"
-            targets: "XY-C1 JCG-836PRO JCG-AC860M JCG-Y2 DIR-882 A3004NS MSG1500 WR1200JS MI-R3G NEWIFI3 B70"
-      fail-fast: false
-    # Skip this job if a specific device is selected and it's not in this variant's targets
-    if: |
-      !github.event.inputs.production ||
-      github.event.inputs.production == '' ||
-      contains(matrix.targets, github.event.inputs.production)
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.clone_url }}
-      - name: Prepare environment
-        run: |
-          sudo apt update
-          sudo apt install libtool-bin gperf python-docutils autopoint gettext
-      - name: Run shellcheck
-        run: sh ./trunk/tools/shellcheck.sh
-      - name: Prepare toolchain
-        run: |
-          cd toolchain-mipsel
-          sh dl_toolchain.sh
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        if: ${{ github.event.inputs.debug_enabled == 'yes' }}
-        with:
-          limit-access-to-actor: true
-      - name: Start build
-        run: |
-          cd trunk
-          mkdir -p ${images_dir}
-
-          # Check if specific device is selected
-          if [ -n "$selected_device" ]; then
-            echo "Building selected device: $selected_device"
-            # Check if device exists in current matrix targets
-            if echo "$targets" | grep -q "$selected_device"; then
-              fakeroot ./build_firmware_ci $selected_device
-              if [ $? = 0 ]; then
-                cp -f images/*.trx ${images_dir}/$selected_device.trx
-              else
-                exit 1
-              fi
-            else
-              echo "Device $selected_device not found in current build variant ($build_variant)"
-              echo "Available devices for this variant: $targets"
-              exit 1
-            fi
-          else
-            echo "Building all devices for variant: $build_variant"
-            # Original behavior: build all targets
-            for m in $targets; do
-              fakeroot ./build_firmware_ci $m
-              if [ $? = 0 ]; then
-                cp -f images/*.trx ${images_dir}/$m.trx
-              else
-                exit 1
-              fi
-              ./clear_tree_simple >/dev/null 2>&1
-            done
-          fi
-      - name: Create archive
-        if: ${{ success() }}
-        run: |
-          ls -lh ${images_dir}
-          GIT_VERSION=`git rev-parse --short=7 HEAD 2>/dev/null` && [ -n "$GIT_VERSION" ] && \
-          image_name=images_${build_variant}_${GIT_VERSION} || image_name=images_${build_variant}
-          cd ${images_dir}; md5sum *.trx |tee md5sum.txt; 7z a -mx=9 ${image_name}.7z ./*
-          echo "image_name=${image_name}" >> $GITHUB_ENV
-      - name: Upload images to Artifact
-        if: ${{ success() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.image_name }}
-          path: ${{ env.images_dir }}/*.7z
-      - name: Upload images to Releases
-        if: ${{ env.upload_release == 'yes' && success() }}
-        uses: svenstaro/upload-release-action@2.2.0
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ${{ env.images_dir }}/*.trx
-          tag: ${{ github.run_id }}
-          overwrite: true
-          file_glob: true
+name: Padavan  
+  
+on:  
+  workflow_dispatch:  
+    inputs:  
+      production:  
+        description: 选择固件型号：  
+        required: false  
+        default: "NEWIFI3"  
+        type: choice  
+        options:  
+          - ''  
+          - 360P2  
+          - 5K-W20  
+          - A3004NS  
+          - B70  
+          - CR660x  
+          - DIR-878  
+          - DIR-882  
+          - HC5661A  
+          - HC5761A  
+          - HC5861B  
+          - JCG-836PRO  
+          - JCG-AC860M  
+          - JCG-Y2  
+          - K2P_nano  
+          - K2P  
+          - KFRouter-S1  
+          - MI-3  
+          - MI-MINI  
+          - MI-NANO  
+          - MI-R3G  
+          - MSG1500  
+          - MZ-R13  
+          - MZ-R13P  
+          - NEWIFI3  
+          - NEWIFI-MINI  
+          - Oray-D1509  
+          - OYE-001  
+          - PSG1208  
+          - PSG1218  
+          - RM2100  
+          - WR1200JS  
+          - XY-C1  
+          - Youku-L1  
+      cloneurl:  
+        description: 设置源码地址：  
+        required: false  
+        default: "https://github.com/lucktu/padavan.git"  
+      release:  
+        description: 是否发布到Release？  
+        default: 'no'  
+        required: false  
+        type: choice  
+        options:  
+          - 'no'  
+          - 'yes'  
+  
+env:  
+  IMAGES: /opt/images  
+  RT_N56U: /opt/rt-n56u  
+  TRUNK: /opt/rt-n56u/trunk  
+  
+jobs:  
+  build:  
+    runs-on: ubuntu-22.04  
+    steps:  
+    - name: 同步主存储库  
+      uses: actions/checkout@v4  
+        
+    - name: 初始环境设置  
+      run: |  
+        sudo apt-get update  
+        sudo apt install unzip libtool-bin curl cmake gperf gawk flex bison nano xxd \  
+        fakeroot kmod cpio git python3-docutils gettext automake autopoint \  
+        texinfo build-essential help2man pkg-config zlib1g-dev libgmp3-dev \  
+        libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget libc-dev-bin > /dev/null  
+          
+    - name: 下载源码  
+      run: |  
+        echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV  
+        echo "NAME=Padavan-${{ github.event.inputs.production }}" >> $GITHUB_ENV  
+        mkdir -p $IMAGES  
+        echo 开始编译时间： >> $IMAGES/readme.txt  
+        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt  
+        git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null  
+        cd $RT_N56U/toolchain-mipsel  
+        sh dl_toolchain.sh > /dev/null  
+          
+    - name: 开始编译  
+      run: |  
+        if [ -n "${{ github.event.inputs.production }}" ]; then  
+          echo "Building selected device: ${{ github.event.inputs.production }}"  
+          cd $TRUNK  
+            
+          # 设置设备配置  
+          export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"  
+            
+          # 检查设备配置是否存在  
+          if [ ! -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then  
+            echo "Device configuration not found for ${{ github.event.inputs.production }}"  
+            echo "Available devices:"  
+            ls configs/boards/  
+            exit 1  
+          fi  
+            
+          # 编译固件  
+          fakeroot ./build_firmware_ci ${{ github.event.inputs.production }}  
+            
+          if [ $? = 0 ]; then  
+            cp -f images/*.trx $IMAGES/  
+          else  
+            exit 1  
+          fi  
+        else  
+          echo "No device selected, please select a device model"  
+          exit 1  
+        fi  
+          
+    - name: 收集信息  
+      run: |  
+        cd $IMAGES  
+        echo 完成编译时间： >> readme.txt  
+        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> readme.txt  
+        echo >> readme.txt  
+        echo 源码信息： >> readme.txt  
+        echo "源码地址: ${{ github.event.inputs.cloneurl }}" >> readme.txt  
+        pushd $RT_N56U  
+        git log -1 --format="%H %s" >> $IMAGES/readme.txt  
+        popd  
+        echo >> readme.txt  
+        echo md5校验值： >> readme.txt  
+        for m in *.trx  
+        do  
+          mv -fv "$m" "${m%.*}_${{ env.DATE }}.trx"  
+        done  
+        md5sum *.trx >> readme.txt || echo  
+        ls -l  
+          
+    - name: 上传固件到Artifacts  
+      if: true  
+      uses: actions/upload-artifact@v4  
+      with:  
+        name: ${{ env.NAME }}  
+        path: ${{ env.IMAGES }}  
+          
+    - name: 发布固件到Release  
+      if: ${{ github.event.inputs.release == 'yes' }}  
+      uses: softprops/action-gh-release@v1  
+      with:  
+        name: ${{ env.NAME }}  
+        tag_name: ${{ env.DATE }}  
+        body_path: ${{ env.IMAGES }}/readme.txt  
+        draft: false  
+        prerelease: false  
+        files: ${{ env.IMAGES }}/*  
+      env:  
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
