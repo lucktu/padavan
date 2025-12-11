@@ -105,19 +105,11 @@ jobs:
         git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null  
           
     - name: 清理以前的编译  
-      if: ${{ github.event.inputs.clean_build == 'yes' }}  
+      if: github.event.inputs.clean_build == 'yes'  
       run: |  
-        echo "清理以前的编译文件..."  
-        cd $TRUNK  
-        # 清理编译产物  
-        [ -d "images" ] && rm -rf images/*  
-        [ -d "romfs" ] && rm -rf romfs  
-        # 清理工具链缓存（如果需要完全重新构建）  
-        if [ "${{ steps.cache-toolchain.outputs.cache-hit }}" = "true" ]; then  
-          echo "保留工具链缓存，仅清理编译产物"  
-        else  
-          echo "工具链缓存未命中，将重新构建"  
-        fi  
+        echo "清理以前的编译结果..."  
+        rm -rf $RT_N56U/trunk/images  
+        rm -rf $RT_N56U/trunk/romfs  
           
     - name: 构建工具链（如果缓存未命中）  
       if: steps.cache-toolchain.outputs.cache-hit != 'true'  
@@ -170,7 +162,7 @@ EOF
             ls configs/boards/  
             exit 1  
           fi  
-            
+  
           # 如果是缓存恢复，跳过清理步骤  
           if [ "${{ steps.cache-build.outputs.cache-hit }}" = "true" ]; then  
             echo "Using cached build, skipping clear_tree"  
