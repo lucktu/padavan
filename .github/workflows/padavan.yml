@@ -1,158 +1,158 @@
-name: Padavan  
-  
-on:  
-  workflow_dispatch:  
-    inputs:  
-      production:  
-        description: 选择固件型号：  
-        required: false  
-        default: "NEWIFI3"  
-        type: choice  
-        options:  
-          - ''  
-          - 360P2  
-          - 5K-W20  
-          - A3004NS  
-          - B70  
-          - CR660x  
-          - DIR-878  
-          - DIR-882  
-          - HC5661A  
-          - HC5761A  
-          - HC5861B  
-          - JCG-836PRO  
-          - JCG-AC860M  
-          - JCG-Y2  
-          - K2P_nano  
-          - K2P  
-          - KFRouter-S1  
-          - MI-3  
-          - MI-MINI  
-          - MI-NANO  
-          - MI-R3G  
-          - MSG1500  
-          - MZ-R13  
-          - MZ-R13P  
-          - NEWIFI3  
-          - NEWIFI-MINI  
-          - Oray-D1509  
-          - OYE-001  
-          - PSG1208  
-          - PSG1218  
-          - RM2100  
-          - WR1200JS  
-          - XY-C1  
-          - Youku-L1  
-      cloneurl:  
-        description: 设置源码地址：  
-        required: false  
-        default: "https://github.com/lucktu/padavan.git"  
-      release:  
-        description: 是否发布到Release？  
-        default: 'no'  
-        required: false  
-        type: choice  
-        options:  
-          - 'no'  
-          - 'yes'  
-  
-env:  
-  IMAGES: /opt/images  
-  RT_N56U: /opt/rt-n56u  
-  TRUNK: /opt/rt-n56u/trunk  
-  
-jobs:  
-  build:  
-    runs-on: ubuntu-22.04  
-    steps:  
-    - name: 同步主存储库  
-      uses: actions/checkout@v4  
-        
-    - name: 初始环境设置  
-      run: |  
-        sudo apt-get update  
-        sudo apt install unzip libtool-bin curl cmake gperf gawk flex bison nano xxd \  
-        fakeroot kmod cpio git python3-docutils gettext automake autopoint \  
-        texinfo build-essential help2man pkg-config zlib1g-dev libgmp3-dev \  
-        libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget libc-dev-bin > /dev/null  
-          
-    - name: 下载源码  
-      run: |  
-        echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV  
-        echo "NAME=Padavan-${{ github.event.inputs.production }}" >> $GITHUB_ENV  
-        mkdir -p $IMAGES  
-        echo 开始编译时间： >> $IMAGES/readme.txt  
-        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt  
-        git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null  
-        cd $RT_N56U/toolchain-mipsel  
-        sh dl_toolchain.sh > /dev/null  
-          
-    - name: 开始编译  
-      run: |  
-        if [ -n "${{ github.event.inputs.production }}" ]; then  
-          echo "Building selected device: ${{ github.event.inputs.production }}"  
-          cd $TRUNK  
-            
-          # 设置设备配置  
-          export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"  
-            
-          # 检查设备配置是否存在  
-          if [ ! -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then  
-            echo "Device configuration not found for ${{ github.event.inputs.production }}"  
-            echo "Available devices:"  
-            ls configs/boards/  
-            exit 1  
-          fi  
-            
-          # 编译固件  
-          fakeroot ./build_firmware_ci ${{ github.event.inputs.production }}  
-            
-          if [ $? = 0 ]; then  
-            cp -f images/*.trx $IMAGES/  
-          else  
-            exit 1  
-          fi  
-        else  
-          echo "No device selected, please select a device model"  
-          exit 1  
-        fi  
-          
-    - name: 收集信息  
-      run: |  
-        cd $IMAGES  
-        echo 完成编译时间： >> readme.txt  
-        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> readme.txt  
-        echo >> readme.txt  
-        echo 源码信息： >> readme.txt  
-        echo "源码地址: ${{ github.event.inputs.cloneurl }}" >> readme.txt  
-        pushd $RT_N56U  
-        git log -1 --format="%H %s" >> $IMAGES/readme.txt  
-        popd  
-        echo >> readme.txt  
-        echo md5校验值： >> readme.txt  
-        for m in *.trx  
-        do  
-          mv -fv "$m" "${m%.*}_${{ env.DATE }}.trx"  
-        done  
-        md5sum *.trx >> readme.txt || echo  
-        ls -l  
-          
-    - name: 上传固件到Artifacts  
-      if: true  
-      uses: actions/upload-artifact@v4  
-      with:  
-        name: ${{ env.NAME }}  
-        path: ${{ env.IMAGES }}  
-          
-    - name: 发布固件到Release  
-      if: ${{ github.event.inputs.release == 'yes' }}  
-      uses: softprops/action-gh-release@v1  
-      with:  
-        name: ${{ env.NAME }}  
-        tag_name: ${{ env.DATE }}  
-        body_path: ${{ env.IMAGES }}/readme.txt  
-        draft: false  
-        prerelease: false  
-        files: ${{ env.IMAGES }}/*  
-      env:  
+name: Padavan
+
+on:
+  workflow_dispatch:
+    inputs:
+      production:
+        description: 选择固件型号：
+        required: false
+        default: "NEWIFI3"
+        type: choice
+        options:
+          - ''
+          - 360P2
+          - 5K-W20
+          - A3004NS
+          - B70
+          - CR660x
+          - DIR-878
+          - DIR-882
+          - HC5661A
+          - HC5761A
+          - HC5861B
+          - JCG-836PRO
+          - JCG-AC860M
+          - JCG-Y2
+          - K2P_nano
+          - K2P
+          - KFRouter-S1
+          - MI-3
+          - MI-MINI
+          - MI-NANO
+          - MI-R3G
+          - MSG1500
+          - MZ-R13
+          - MZ-R13P
+          - NEWIFI3
+          - NEWIFI-MINI
+          - Oray-D1509
+          - OYE-001
+          - PSG1208
+          - PSG1218
+          - RM2100
+          - WR1200JS
+          - XY-C1
+          - Youku-L1
+      cloneurl:
+        description: 设置源码地址：
+        required: false
+        default: "https://github.com/lucktu/padavan.git"
+      release:
+        description: 是否发布到Release？
+        default: 'no'
+        required: false
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+
+env:
+  IMAGES: /opt/images
+  RT_N56U: /opt/rt-n56u
+  TRUNK: /opt/rt-n56u/trunk
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: 同步主存储库
+      uses: actions/checkout@v4
+
+    - name: 初始环境设置
+      run: |
+        sudo apt-get update
+        sudo apt install unzip libtool curl gperf gawk flex bison nano xxd \
+        fakeroot kmod cpio git python3-docutils gettext automake autopoint \
+        texinfo build-essential pkg-config zlib1g-dev libgmp3-dev \
+        libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget -y > /dev/null
+
+    - name: 下载源码
+      run: |
+        echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV
+        echo "NAME=Padavan-${{ github.event.inputs.production }}" >> $GITHUB_ENV
+        mkdir -p $IMAGES
+        echo 开始编译时间： >> $IMAGES/readme.txt
+        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt
+        git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null
+        cd $RT_N56U/toolchain-mipsel
+        sh dl_toolchain.sh > /dev/null
+
+    - name: 开始编译
+      run: |
+        if [ -n "${{ github.event.inputs.production }}" ]; then
+          echo "Building selected device: ${{ github.event.inputs.production }}"
+          cd $TRUNK
+
+          # 设置设备配置
+          export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"
+
+          # 检查设备配置是否存在
+          if [ ! -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then
+            echo "Device configuration not found for ${{ github.event.inputs.production }}"
+            echo "Available devices:"
+            ls configs/boards/
+            exit 1
+          fi
+
+          # 编译固件
+          fakeroot ./build_firmware_ci ${{ github.event.inputs.production }}
+
+          if [ $? = 0 ]; then
+            cp -f images/*.trx $IMAGES/
+          else
+            exit 1
+          fi
+        else
+          echo "No device selected, please select a device model"
+          exit 1
+        fi
+
+    - name: 收集信息
+      run: |
+        cd $IMAGES
+        echo 完成编译时间： >> readme.txt
+        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> readme.txt
+        echo >> readme.txt
+        echo 源码信息： >> readme.txt
+        echo "源码地址: ${{ github.event.inputs.cloneurl }}" >> readme.txt
+        pushd $RT_N56U
+        git log -1 --format="%H %s" >> $IMAGES/readme.txt
+        popd
+        echo >> readme.txt
+        echo md5校验值： >> readme.txt
+        for m in *.trx
+        do
+          mv -fv "$m" "${m%.*}_${{ env.DATE }}.trx"
+        done
+        md5sum *.trx >> readme.txt || echo
+        ls -l
+
+    - name: 上传固件到Artifacts
+      if: true
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.NAME }}
+        path: ${{ env.IMAGES }}
+
+    - name: 发布固件到Release
+      if: ${{ github.event.inputs.release == 'yes' }}
+      uses: softprops/action-gh-release@v1
+      with:
+        name: ${{ env.NAME }}
+        tag_name: ${{ env.DATE }}
+        body_path: ${{ env.IMAGES }}/readme.txt
+        draft: false
+        prerelease: false
+        files: ${{ env.IMAGES }}/*
+      env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
