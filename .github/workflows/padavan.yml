@@ -79,10 +79,35 @@ jobs:
     - name: 初始环境设置  
       run: |  
         sudo apt-get update  
-        sudo apt install -y git build-essential gawk pkg-config gettext \  
-        automake autoconf autopoint libtool bison flex zlib1g-dev \  
-        libgmp3-dev libmpfr-dev libmpc-dev texinfo libncurses5-dev \  
-        nano vim gperf python3-docutils fakeroot kmod cpio wget  
+        sudo apt install -y \  
+        git \  
+        build-essential \  
+        gawk \  
+        pkg-config \  
+        gettext \  
+        automake \  
+        autoconf \  
+        autopoint \  
+        libtool \  
+        bison \  
+        flex \  
+        zlib1g-dev \  
+        libgmp3-dev \  
+        libmpfr-dev \  
+        libmpc-dev \  
+        texinfo \  
+        mc \  
+        libncurses5-dev \  
+        nano \  
+        vim \  
+        gperf \  
+        python3-docutils \  
+        unzip \  
+        curl \  
+        fakeroot \  
+        kmod \  
+        cpio \  
+        wget  
           
     - name: 设置环境变量  
       run: |  
@@ -96,7 +121,7 @@ jobs:
         path: |  
           /opt/rt-n56u/toolchain-mipsel  
           /opt/rt-n56u/dl  
-        key: toolchain-${{ runner.os }}-${{ hashFiles('**/build_toolchain') }}  
+        key: toolchain-${{ runner.os }}-${{ hashFiles('**/toolchain-mipsel/*') }}  
         restore-keys: |  
           toolchain-${{ runner.os }}-  
             
@@ -113,7 +138,9 @@ jobs:
             
     - name: 下载源码  
       run: |  
-        git clone ${{ github.event.inputs.cloneurl }} $RT_N56U  
+        echo 开始编译时间： >> $IMAGES/readme.txt  
+        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt  
+        git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null  
           
     - name: 构建工具链（如果缓存未命中）  
       if: steps.cache-toolchain.outputs.cache-hit != 'true'  
@@ -156,8 +183,8 @@ EOF
           # 设置设备配置  
           export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"  
             
-          # 检查是否使用缓存的编译  
-          if [ "${{ steps.cache-build.outputs.cache-hit }}" = "true" ]; then  
+          # 根据缓存状态决定是否清理  
+          if [ "${{ steps.cache-build.outputs.cache-hit }}" == "true" ]; then  
             echo "Using cached build, skipping clear_tree"  
           else  
             sudo ./clear_tree || echo  
@@ -175,7 +202,7 @@ EOF
           echo "No device selected, please select a device model"  
           exit 1  
         fi  
-          
+            
     - name: 收集信息  
       run: |  
         cd $IMAGES  
