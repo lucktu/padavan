@@ -95,6 +95,18 @@ jobs:
         restore-keys: |  
           toolchain-${{ runner.os }}-  
             
+    - name: 缓存编译产物  
+      uses: actions/cache@v3  
+      id: cache-build  
+      with:  
+        path: |  
+          /opt/rt-n56u/trunk/src  
+          /opt/rt-n56u/trunk/release/src  
+          /opt/rt-n56u/trunk/images  
+        key: build-${{ github.event.inputs.production }}-${{ github.run_id }}  
+        restore-keys: |  
+          build-${{ github.event.inputs.production }}-  
+            
     - name: 下载源码  
       run: |  
         echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV  
@@ -107,9 +119,8 @@ jobs:
     - name: 清理以前的编译  
       if: github.event.inputs.clean_build == 'yes'  
       run: |  
-        echo "清理以前的编译结果..."  
-        rm -rf $RT_N56U/trunk/images  
-        rm -rf $RT_N56U/trunk/romfs  
+        cd $RT_N56U/trunk  
+        rm -rf images/* romfs/* || echo  
           
     - name: 构建工具链（如果缓存未命中）  
       if: steps.cache-toolchain.outputs.cache-hit != 'true'  
@@ -134,27 +145,14 @@ EOF
         sed -i 's/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security"/HOSTCFLAGS="$HOSTCFLAGS -w"/g' build_toolchain  
         sh build_toolchain > /dev/null  
           
-    - name: 缓存编译产物  
-      uses: actions/cache@v3  
-      id: cache-build  
-      with:  
-        path: |  
-          /opt/rt-n56u/trunk/src  
-          /opt/rt-n56u/trunk/release/src  
-          /opt/rt-n56u/trunk/images  
-        key: build-${{ github.event.inputs.production }}-${{ github.run_id }}  
-        restore-keys: |  
-          build-${{ github.event.inputs.production }}-  
-            
     - name: 开始编译  
       run: |  
+        cd $TRUNK  
+          
         if [ -n "${{ github.event.inputs.production }}" ]; then  
-          echo "Building selected device: ${{ github.event.inputs.production }}"  
-          cd $TRUNK  
-  
-          # 设置设备配置  
+          # 设置设备型号  
           export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"  
-  
+            
           # 检查设备配置是否存在  
           if [ ! -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then  
             echo "Device configuration not found for ${{ github.event.inputs.production }}"  
@@ -162,7 +160,7 @@ EOF
             ls configs/boards/  
             exit 1  
           fi  
-  
+            
           # 如果是缓存恢复，跳过清理步骤  
           if [ "${{ steps.cache-build.outputs.cache-hit }}" = "true" ]; then  
             echo "Using cached build, skipping clear_tree"  
