@@ -73,13 +73,13 @@ jobs:
   build:  
     runs-on: ubuntu-22.04  
     steps:  
-    - name: 同步主存储库  
+    - name: Checkout  
       uses: actions/checkout@v4  
         
     - name: 初始环境设置  
       run: |  
         sudo apt-get update  
-        sudo apt install -y \  
+        sudo apt-get install -y \  
           git \  
           build-essential \  
           gawk \  
@@ -101,21 +101,13 @@ jobs:
           nano \  
           vim \  
           gperf \  
-          python3-docutils \  
-          unzip \  
-          curl \  
-          fakeroot \  
-          kmod \  
-          cpio \  
-          wget  
-            
+          python-docutils  
+          
     - name: 设置环境变量  
       run: |  
         echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV  
         echo "NAME=Padavan-${{ github.event.inputs.production }}" >> $GITHUB_ENV  
         mkdir -p $IMAGES  
-        echo 开始编译时间： >> $IMAGES/readme.txt  
-        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt  
           
     - name: 缓存工具链  
       uses: actions/cache@v3  
@@ -140,7 +132,7 @@ jobs:
             
     - name: 下载源码  
       run: |  
-        git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null  
+        git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U  
           
     - name: 构建工具链（如果缓存未命中）  
       if: steps.cache-toolchain.outputs.cache-hit != 'true'  
@@ -169,25 +161,29 @@ EOF
         cd $RT_N56U/trunk  
         rm -rf images/ romfs/  
           
-    - name: 开始编译固件  
+    - name: 开始编译  
       run: |  
         cd $TRUNK  
         if [ -n "${{ github.event.inputs.production }}" ]; then  
-          if [ -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then  
-            echo "开始编译设备: ${{ github.event.inputs.production }}"  
+          if [ "${{ github.event.inputs.production }}" != "" ]; then  
+            echo "开始编译固件：${{ github.event.inputs.production }}"  
             export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"  
+            if [ ! -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then  
+              echo "设备配置文件不存在"  
+              exit 1  
+            fi  
             fakeroot ./build_firmware_ci ${{ github.event.inputs.production }}  
             if [ $? = 0 ]; then  
-              cp -f images/*.trx $IMAGES/  
+              cp -f images/*.trx ${IMAGES}/  
             else  
               exit 1  
             fi  
           else  
-            echo "设备配置不存在: ${{ github.event.inputs.production }}"  
+            echo "没有选择设备型号"  
             exit 1  
           fi  
         else  
-          echo "没有选择设备，请选择设备型号"  
+          echo "没有选择设备型号"  
           exit 1  
         fi  
           
@@ -230,3 +226,4 @@ EOF
         files: ${{ env.IMAGES }}/*  
       env:  
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
