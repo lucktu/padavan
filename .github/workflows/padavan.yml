@@ -1,4 +1,4 @@
-name: 编译原版 Padavan
+name: Padavan
 
 on:
   workflow_dispatch:
@@ -100,14 +100,9 @@ jobs:
       if: steps.cache-toolchain.outputs.cache-hit != 'true'
       run: |
         cd $RT_N56U/toolchain-mipsel
-        # 使用 lucktu/padavan 的实际脚本名
-        if [ -f "build_toolchain" ]; then
-          sh build_toolchain > /dev/null
-        else
-          echo "Toolchain build script not found"
-          ls -la
-          exit 1
-        fi
+        # 修复 GCC 兼容性问题 - 添加 pedantic 警告抑制
+        sed -i 's/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security"/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security -Wno-pedantic -Wno-error=pedantic"/g' build_toolchain
+        sh build_toolchain > /dev/null
 
     - name: 缓存编译产物
       uses: actions/cache@v3
