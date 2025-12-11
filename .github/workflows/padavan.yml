@@ -47,6 +47,14 @@ on:
         description: 设置源码地址：  
         required: false  
         default: "https://github.com/lucktu/padavan.git"  
+      clean_build:  
+        description: 清理以前的编译？  
+        required: false  
+        default: 'yes'  
+        type: choice  
+        options:  
+          - 'no'  
+          - 'yes'  
       release:  
         description: 是否发布到Release？  
         default: 'no'  
@@ -95,7 +103,22 @@ jobs:
         echo 开始编译时间： >> $IMAGES/readme.txt  
         TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt  
         git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null  
-      
+          
+    - name: 清理以前的编译  
+      if: ${{ github.event.inputs.clean_build == 'yes' }}  
+      run: |  
+        echo "清理以前的编译文件..."  
+        cd $TRUNK  
+        # 清理编译产物  
+        [ -d "images" ] && rm -rf images/*  
+        [ -d "romfs" ] && rm -rf romfs  
+        # 清理工具链缓存（如果需要完全重新构建）  
+        if [ "${{ steps.cache-toolchain.outputs.cache-hit }}" = "true" ]; then  
+          echo "保留工具链缓存，仅清理编译产物"  
+        else  
+          echo "工具链缓存未命中，将重新构建"  
+        fi  
+          
     - name: 构建工具链（如果缓存未命中）  
       if: steps.cache-toolchain.outputs.cache-hit != 'true'  
       run: |  
@@ -130,7 +153,7 @@ EOF
         key: build-${{ github.event.inputs.production }}-${{ github.run_id }}  
         restore-keys: |  
           build-${{ github.event.inputs.production }}-  
-  
+            
     - name: 开始编译  
       run: |  
         if [ -n "${{ github.event.inputs.production }}" ]; then  
