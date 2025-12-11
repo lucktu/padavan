@@ -1,209 +1,209 @@
-name: Padavan
-
-on:
-  workflow_dispatch:
-    inputs:
-      production:
-        description: 选择固件型号：
-        required: false
-        default: "KFRouter-S1"
-        type: choice
-        options:
-          - ''
-          - 360P2
-          - 5K-W20
-          - A3004NS
-          - B70
-          - CR660x
-          - DIR-878
-          - DIR-882
-          - HC5661A
-          - HC5761A
-          - HC5861B
-          - JCG-836PRO
-          - JCG-AC860M
-          - JCG-Y2
-          - K2P_nano
-          - K2P
-          - KFRouter-S1
-          - MI-3
-          - MI-MINI
-          - MI-NANO
-          - MI-R3G
-          - MSG1500
-          - MZ-R13
-          - MZ-R13P
-          - NEWIFI3
-          - NEWIFI-MINI
-          - Oray-D1509
-          - OYE-001
-          - PSG1208
-          - PSG1218
-          - RM2100
-          - WR1200JS
-          - XY-C1
-          - Youku-L1
-      cloneurl:
-        description: 设置源码地址：
-        required: false
-        default: "https://github.com/lucktu/padavan.git"
-      release:
-        description: 是否发布到Release？
-        default: 'no'
-        required: false
-        type: choice
-        options:
-          - 'no'
-          - 'yes'
-
-env:
-  IMAGES: /opt/images
-  RT_N56U: /opt/rt-n56u
-  TRUNK: /opt/rt-n56u/trunk
-
-jobs:
-  build:
-    runs-on: ubuntu-22.04
-    steps:
-    - name: 同步主存储库
-      uses: actions/checkout@v4
-
-    - name: 初始环境设置
-      run: |
-        sudo apt-get update
-        sudo apt install unzip libtool curl gperf gawk flex bison nano xxd \
-        fakeroot kmod cpio git python3-docutils gettext automake autopoint \
-        texinfo build-essential pkg-config zlib1g-dev libgmp3-dev \
-        libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget -y > /dev/null
-
-    - name: 缓存工具链
-      uses: actions/cache@v3
-      id: cache-toolchain
-      with:
-        path: |
-          /opt/rt-n56u/toolchain-mipsel
-          /opt/rt-n56u/dl
-        key: toolchain-${{ runner.os }}-${{ hashFiles('**/toolchain-mipsel/build_toolchain') }}
-        restore-keys: |
-          toolchain-${{ runner.os }}-
-
-    - name: 下载源码
-      run: |
-        echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV
-        echo "NAME=Padavan-${{ github.event.inputs.production }}" >> $GITHUB_ENV
-        mkdir -p $IMAGES
-        echo 开始编译时间： >> $IMAGES/readme.txt
-        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt
-        git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null
-
-    - name: 构建工具链（如果缓存未命中）
-      if: steps.cache-toolchain.outputs.cache-hit != 'true'
-      run: |
-        cd $RT_N56U/toolchain-mipsel
-
-        # 创建修复补丁
-        cat > patches/gcc-4.4.7/999-fix-log2-redefinition.patch << 'EOF'
---- a/gcc/toplev.h
-+++ b/gcc/toplev.h
-@@ -187,8 +187,6 @@ extern int flag_fast_math;
-
- /* In toplev.c */
- extern int toplev_main_initialized;
--extern int floor_log2 (unsigned HOST_WIDE_INT);
--extern int exact_log2 (unsigned HOST_WIDE_INT);
-
- #endif /* ! GCC_TOPLEV_H */
-EOF
-
-        # 完全禁用所有警告
-        sed -i 's/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security"/HOSTCFLAGS="$HOSTCFLAGS -w"/g' build_toolchain
-        sh build_toolchain > /dev/null
-
-    - name: 缓存编译产物
-      uses: actions/cache@v3
-      id: cache-build
-      with:
-        path: |
-          /opt/rt-n56u/trunk/src
-          /opt/rt-n56u/trunk/release/src
-          /opt/rt-n56u/trunk/images
-        key: build-${{ github.event.inputs.production }}-${{ github.run_id }}
-        restore-keys: |
-          build-${{ github.event.inputs.production }}-
-
-    - name: 开始编译
-      run: |
-        if [ -n "${{ github.event.inputs.production }}" ]; then
-          echo "Building selected device: ${{ github.event.inputs.production }}"
-          cd $TRUNK
-
-          # 设置设备配置
-          export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"
-
-          # 检查设备配置是否存在
-          if [ ! -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then
-            echo "Device configuration not found for ${{ github.event.inputs.production }}"
-            echo "Available devices:"
-            ls configs/boards/
-            exit 1
-          fi
-
-          # 如果是缓存恢复，跳过清理步骤
-          if [ "${{ steps.cache-build.outputs.cache-hit }}" = "true" ]; then
-            echo "Using cached build, skipping clear_tree"
-          else
-            sudo ./clear_tree || echo
-          fi
-
-          # 编译固件
-          fakeroot ./build_firmware_ci ${{ github.event.inputs.production }}
-
-          if [ $? = 0 ]; then
-            cp -f images/*.trx $IMAGES/
-          else
-            exit 1
-          fi
-        else
-          echo "No device selected, please select a device model"
-          exit 1
-        fi
-
-    - name: 收集信息
-      run: |
-        cd $IMAGES
-        echo 完成编译时间： >> readme.txt
-        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> readme.txt
-        echo >> readme.txt
-        echo 源码信息： >> readme.txt
-        echo "源码地址: ${{ github.event.inputs.cloneurl }}" >> readme.txt
-        pushd $RT_N56U
-        git log -1 --format="%H %s" >> $IMAGES/readme.txt
-        popd
-        echo >> readme.txt
-        echo md5校验值： >> readme.txt
-        for m in *.trx
-        do
-          mv -fv "$m" "${m%.*}_${{ env.DATE }}.trx"
-        done
-        md5sum *.trx >> readme.txt || echo
-        ls -l
-
-    - name: 上传固件到Artifacts
-      if: true
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ env.NAME }}
-        path: ${{ env.IMAGES }}
-
-    - name: 发布固件到Release
-      if: ${{ github.event.inputs.release == 'yes' }}
-      uses: softprops/action-gh-release@v1
-      with:
-        name: ${{ env.NAME }}
-        tag_name: ${{ env.DATE }}
-        body_path: ${{ env.IMAGES }}/readme.txt
-        draft: false
-        prerelease: false
-        files: ${{ env.IMAGES }}/*
-      env:
+name: Padavan  
+  
+on:  
+  workflow_dispatch:  
+    inputs:  
+      production:  
+        description: 选择固件型号：  
+        required: false  
+        default: "KFRouter-S1"  
+        type: choice  
+        options:  
+          - ''  
+          - 360P2  
+          - 5K-W20  
+          - A3004NS  
+          - B70  
+          - CR660x  
+          - DIR-878  
+          - DIR-882  
+          - HC5661A  
+          - HC5761A  
+          - HC5861B  
+          - JCG-836PRO  
+          - JCG-AC860M  
+          - JCG-Y2  
+          - K2P_nano  
+          - K2P  
+          - KFRouter-S1  
+          - MI-3  
+          - MI-MINI  
+          - MI-NANO  
+          - MI-R3G  
+          - MSG1500  
+          - MZ-R13  
+          - MZ-R13P  
+          - NEWIFI3  
+          - NEWIFI-MINI  
+          - Oray-D1509  
+          - OYE-001  
+          - PSG1208  
+          - PSG1218  
+          - RM2100  
+          - WR1200JS  
+          - XY-C1  
+          - Youku-L1  
+      cloneurl:  
+        description: 设置源码地址：  
+        required: false  
+        default: "https://github.com/lucktu/padavan.git"  
+      release:  
+        description: 是否发布到Release？  
+        default: 'no'  
+        required: false  
+        type: choice  
+        options:  
+          - 'no'  
+          - 'yes'  
+  
+env:  
+  IMAGES: /opt/images  
+  RT_N56U: /opt/rt-n56u  
+  TRUNK: /opt/rt-n56u/trunk  
+  
+jobs:  
+  build:  
+    runs-on: ubuntu-22.04  
+    steps:  
+    - name: 同步主存储库  
+      uses: actions/checkout@v4  
+        
+    - name: 初始环境设置  
+      run: |  
+        sudo apt-get update  
+        sudo apt install unzip libtool curl gperf gawk flex bison nano xxd \  
+        fakeroot kmod cpio git python3-docutils gettext automake autopoint \  
+        texinfo build-essential pkg-config zlib1g-dev libgmp3-dev \  
+        libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget -y > /dev/null  
+          
+    - name: 缓存工具链  
+      uses: actions/cache@v3  
+      id: cache-toolchain  
+      with:  
+        path: |  
+          /opt/rt-n56u/toolchain-mipsel  
+          /opt/rt-n56u/dl  
+        key: toolchain-${{ runner.os }}-${{ hashFiles('**/toolchain-mipsel/build_toolchain') }}  
+        restore-keys: |  
+          toolchain-${{ runner.os }}-  
+            
+    - name: 下载源码  
+      run: |  
+        echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV  
+        echo "NAME=Padavan-${{ github.event.inputs.production }}" >> $GITHUB_ENV  
+        mkdir -p $IMAGES  
+        echo 开始编译时间： >> $IMAGES/readme.txt  
+        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt  
+        git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null  
+          
+    - name: 构建工具链（如果缓存未命中）  
+      if: steps.cache-toolchain.outputs.cache-hit != 'true'  
+      run: |  
+        cd $RT_N56U/toolchain-mipsel  
+          
+        # 创建修复补丁 - 注意EOF必须在行首  
+        cat > patches/gcc-4.4.7/999-fix-log2-redefinition.patch << 'EOF'  
+--- a/gcc/toplev.h  
++++ b/gcc/toplev.h  
+@@ -187,8 +187,6 @@ extern int flag_fast_math;  
+   
+ /* In toplev.c */  
+ extern int toplev_main_initialized;  
+-extern int floor_log2 (unsigned HOST_WIDE_INT);  
+-extern int exact_log2 (unsigned HOST_WIDE_INT);  
+   
+ #endif /* ! GCC_TOPLEV_H */  
+EOF  
+          
+        # 完全禁用所有警告  
+        sed -i 's/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security"/HOSTCFLAGS="$HOSTCFLAGS -w"/g' build_toolchain  
+        sh build_toolchain > /dev/null  
+          
+    - name: 缓存编译产物  
+      uses: actions/cache@v3  
+      id: cache-build  
+      with:  
+        path: |  
+          /opt/rt-n56u/trunk/src  
+          /opt/rt-n56u/trunk/release/src  
+          /opt/rt-n56u/trunk/images  
+        key: build-${{ github.event.inputs.production }}-${{ github.run_id }}  
+        restore-keys: |  
+          build-${{ github.event.inputs.production }}-  
+            
+    - name: 开始编译  
+      run: |  
+        if [ -n "${{ github.event.inputs.production }}" ]; then  
+          echo "Building selected device: ${{ github.event.inputs.production }}"  
+          cd $TRUNK  
+            
+          # 设置设备配置  
+          export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"  
+            
+          # 检查设备配置是否存在  
+          if [ ! -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then  
+            echo "Device configuration not found for ${{ github.event.inputs.production }}"  
+            echo "Available devices:"  
+            ls configs/boards/  
+            exit 1  
+          fi  
+            
+          # 如果是缓存恢复，跳过清理步骤  
+          if [ "${{ steps.cache-build.outputs.cache-hit }}" = "true" ]; then  
+            echo "Using cached build, skipping clear_tree"  
+          else  
+            sudo ./clear_tree || echo  
+          fi  
+            
+          # 编译固件  
+          fakeroot ./build_firmware_ci ${{ github.event.inputs.production }}  
+            
+          if [ $? = 0 ]; then  
+            cp -f images/*.trx $IMAGES/  
+          else  
+            exit 1  
+          fi  
+        else  
+          echo "No device selected, please select a device model"  
+          exit 1  
+        fi  
+          
+    - name: 收集信息  
+      run: |  
+        cd $IMAGES  
+        echo 完成编译时间： >> readme.txt  
+        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> readme.txt  
+        echo >> readme.txt  
+        echo 源码信息： >> readme.txt  
+        echo "源码地址: ${{ github.event.inputs.cloneurl }}" >> readme.txt  
+        pushd $RT_N56U  
+        git log -1 --format="%H %s" >> $IMAGES/readme.txt  
+        popd  
+        echo >> readme.txt  
+        echo md5校验值： >> readme.txt  
+        for m in *.trx  
+        do  
+          mv -fv "$m" "${m%.*}_${{ env.DATE }}.trx"  
+        done  
+        md5sum *.trx >> readme.txt || echo  
+        ls -l  
+          
+    - name: 上传固件到Artifacts  
+      if: true  
+      uses: actions/upload-artifact@v4  
+      with:  
+        name: ${{ env.NAME }}  
+        path: ${{ env.IMAGES }}  
+          
+    - name: 发布固件到Release  
+      if: ${{ github.event.inputs.release == 'yes' }}  
+      uses: softprops/action-gh-release@v1  
+      with:  
+        name: ${{ env.NAME }}  
+        tag_name: ${{ env.DATE }}  
+        body_path: ${{ env.IMAGES }}/readme.txt  
+        draft: false  
+        prerelease: false  
+        files: ${{ env.IMAGES }}/*  
+      env:  
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
