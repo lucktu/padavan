@@ -96,23 +96,26 @@ jobs:
           libmpfr-dev \  
           libmpc-dev \  
           texinfo \  
+          mc \  
           libncurses5-dev \  
           nano \  
           vim \  
           gperf \  
           python3-docutils \  
+          unzip \  
+          curl \  
           fakeroot \  
           kmod \  
           cpio \  
-          wget \  
-          unzip \  
-          xxd \  
-          curl  
+          wget  
             
     - name: 设置环境变量  
       run: |  
         echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV  
         echo "NAME=Padavan-${{ github.event.inputs.production }}" >> $GITHUB_ENV  
+        mkdir -p $IMAGES  
+        echo 开始编译时间： >> $IMAGES/readme.txt  
+        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt  
           
     - name: 缓存工具链  
       uses: actions/cache@v3  
@@ -137,9 +140,6 @@ jobs:
             
     - name: 下载源码  
       run: |  
-        mkdir -p $IMAGES  
-        echo 开始编译时间： >> $IMAGES/readme.txt  
-        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt  
         git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null  
           
     - name: 构建工具链（如果缓存未命中）  
@@ -167,37 +167,27 @@ EOF
       if: github.event.inputs.clean_build == 'yes'  
       run: |  
         cd $RT_N56U/trunk  
-        rm -rf images/* romfs/* || true  
+        rm -rf images/ romfs/  
           
     - name: 开始编译固件  
       run: |  
         cd $TRUNK  
-          
         if [ -n "${{ github.event.inputs.production }}" ]; then  
-          # 检查设备配置是否存在  
-          if [ ! -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then  
-            echo "Device configuration not found: ${{ github.event.inputs.production }}"  
-            exit 1  
-          fi  
-            
-          # 设置设备配置  
-          export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"  
-            
-          # 如果缓存命中，跳过清理  
-          if [ "${{ steps.cache-build.outputs.cache-hit }}" != "true" ]; then  
-            ./clear_tree_simple >/dev/null 2>&1 || true  
-          fi  
-            
-          # 编译固件  
-          fakeroot ./build_firmware_ci ${{ github.event.inputs.production }}  
-            
-          if [ $? = 0 ]; then  
-            cp -f images/*.trx $IMAGES/  
+          if [ -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then  
+            echo "开始编译设备: ${{ github.event.inputs.production }}"  
+            export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"  
+            fakeroot ./build_firmware_ci ${{ github.event.inputs.production }}  
+            if [ $? = 0 ]; then  
+              cp -f images/*.trx $IMAGES/  
+            else  
+              exit 1  
+            fi  
           else  
+            echo "设备配置不存在: ${{ github.event.inputs.production }}"  
             exit 1  
           fi  
         else  
-          echo "No device selected, please select a device model"  
+          echo "没有选择设备，请选择设备型号"  
           exit 1  
         fi  
           
