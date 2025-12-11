@@ -1,4 +1,4 @@
-name: Padavan
+name: 编译原版 Padavan
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       production:
         description: 选择固件型号：
         required: false
-        default: "NEWIFI3"
+        default: "KFRouter-S1"
         type: choice
         options:
           - ''
@@ -76,6 +76,17 @@ jobs:
         texinfo build-essential pkg-config zlib1g-dev libgmp3-dev \
         libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget -y > /dev/null
 
+    - name: 缓存工具链
+      uses: actions/cache@v3
+      id: cache-toolchain
+      with:
+        path: |
+          /opt/rt-n56u/toolchain-mipsel
+          /opt/rt-n56u/dl
+        key: toolchain-${{ runner.os }}-${{ hashFiles('**/toolchain-mipsel/build_toolchain') }}
+        restore-keys: |
+          toolchain-${{ runner.os }}-
+
     - name: 下载源码
       run: |
         echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV
@@ -84,8 +95,31 @@ jobs:
         echo 开始编译时间： >> $IMAGES/readme.txt
         TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt
         git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null
-        #cd $RT_N56U/toolchain-mipsel
-        #sh dl_toolchain.sh > /dev/null
+
+    - name: 构建工具链（如果缓存未命中）
+      if: steps.cache-toolchain.outputs.cache-hit != 'true'
+      run: |
+        cd $RT_N56U/toolchain-mipsel
+        # 使用 lucktu/padavan 的实际脚本名
+        if [ -f "build_toolchain" ]; then
+          sh build_toolchain > /dev/null
+        else
+          echo "Toolchain build script not found"
+          ls -la
+          exit 1
+        fi
+
+    - name: 缓存编译产物
+      uses: actions/cache@v3
+      id: cache-build
+      with:
+        path: |
+          /opt/rt-n56u/trunk/src
+          /opt/rt-n56u/trunk/release/src
+          /opt/rt-n56u/trunk/images
+        key: build-${{ github.event.inputs.production }}-${{ github.run_id }}
+        restore-keys: |
+          build-${{ github.event.inputs.production }}-
 
     - name: 开始编译
       run: |
@@ -102,6 +136,13 @@ jobs:
             echo "Available devices:"
             ls configs/boards/
             exit 1
+          fi
+
+          # 如果是缓存恢复，跳过清理步骤
+          if [ "${{ steps.cache-build.outputs.cache-hit }}" = "true" ]; then
+            echo "Using cached build, skipping clear_tree"
+          else
+            sudo ./clear_tree || echo
           fi
 
           # 编译固件
