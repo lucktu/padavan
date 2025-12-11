@@ -79,10 +79,34 @@ jobs:
     - name: 初始环境设置  
       run: |  
         sudo apt-get update  
-        sudo apt install unzip libtool curl gperf gawk flex bison nano xxd \  
-        fakeroot kmod cpio git python3-docutils gettext automake autopoint \  
-        texinfo build-essential pkg-config zlib1g-dev libgmp3-dev \  
-        libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget -y > /dev/null  
+        sudo apt install -y \  
+        git \  
+        build-essential \  
+        gawk \  
+        pkg-config \  
+        gettext \  
+        automake \  
+        autoconf \  
+        autopoint \  
+        libtool \  
+        bison \  
+        flex \  
+        zlib1g-dev \  
+        libgmp3-dev \  
+        libmpfr-dev \  
+        libmpc-dev \  
+        texinfo \  
+        libncurses5-dev \  
+        nano \  
+        vim \  
+        gperf \  
+        python3-docutils \  
+        unzip \  
+        curl \  
+        fakeroot \  
+        kmod \  
+        cpio \  
+        wget  
           
     - name: 缓存工具链  
       uses: actions/cache@v3  
@@ -91,7 +115,7 @@ jobs:
         path: |  
           /opt/rt-n56u/toolchain-mipsel  
           /opt/rt-n56u/dl  
-        key: toolchain-${{ runner.os }}-${{ hashFiles('**/toolchain-mipsel/build_toolchain') }}  
+        key: toolchain-${{ runner.os }}-${{ hashFiles('**/toolchain-mipsel/*') }}  
         restore-keys: |  
           toolchain-${{ runner.os }}-  
             
@@ -106,7 +130,7 @@ jobs:
         key: build-${{ github.event.inputs.production }}-${{ github.run_id }}  
         restore-keys: |  
           build-${{ github.event.inputs.production }}-  
-            
+      
     - name: 下载源码  
       run: |  
         echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV  
@@ -115,12 +139,6 @@ jobs:
         echo 开始编译时间： >> $IMAGES/readme.txt  
         TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt  
         git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null  
-          
-    - name: 清理以前的编译  
-      if: github.event.inputs.clean_build == 'yes'  
-      run: |  
-        cd $RT_N56U/trunk  
-        rm -rf images/* romfs/* || echo  
           
     - name: 构建工具链（如果缓存未命中）  
       if: steps.cache-toolchain.outputs.cache-hit != 'true'  
@@ -145,35 +163,42 @@ EOF
         sed -i 's/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security"/HOSTCFLAGS="$HOSTCFLAGS -w"/g' build_toolchain  
         sh build_toolchain > /dev/null  
           
+    - name: 清理以前的编译  
+      if: github.event.inputs.clean_build == 'yes'  
+      run: |  
+        cd $TRUNK  
+        rm -rf images/* romfs/* > /dev/null 2>&1 || true  
+          
     - name: 开始编译  
       run: |  
         cd $TRUNK  
-          
         if [ -n "${{ github.event.inputs.production }}" ]; then  
-          # 设置设备型号  
-          export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"  
-            
           # 检查设备配置是否存在  
-          if [ ! -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then  
+          if [ -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then  
+            echo "Building device: ${{ github.event.inputs.production }}"  
+              
+            # 设置设备配置  
+            export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"  
+              
+            # 如果是缓存恢复，跳过清理步骤  
+            if [ "${{ steps.cache-build.outputs.cache-hit }}" = "true" ]; then  
+              echo "Using cached build, skipping clear_tree"  
+            else  
+              sudo ./clear_tree || echo  
+            fi  
+              
+            # 编译固件  
+            fakeroot ./build_firmware_ci ${{ github.event.inputs.production }}  
+              
+            if [ $? = 0 ]; then  
+              cp -f images/*.trx $IMAGES/  
+            else  
+              exit 1  
+            fi  
+          else  
             echo "Device configuration not found for ${{ github.event.inputs.production }}"  
             echo "Available devices:"  
             ls configs/boards/  
-            exit 1  
-          fi  
-            
-          # 如果是缓存恢复，跳过清理步骤  
-          if [ "${{ steps.cache-build.outputs.cache-hit }}" = "true" ]; then  
-            echo "Using cached build, skipping clear_tree"  
-          else  
-            sudo ./clear_tree || echo  
-          fi  
-            
-          # 编译固件  
-          fakeroot ./build_firmware_ci ${{ github.event.inputs.production }}  
-            
-          if [ $? = 0 ]; then  
-            cp -f images/*.trx $IMAGES/  
-          else  
             exit 1  
           fi  
         else  
