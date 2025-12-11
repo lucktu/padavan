@@ -100,10 +100,8 @@ jobs:
       if: steps.cache-toolchain.outputs.cache-hit != 'true'
       run: |
         cd $RT_N56U/toolchain-mipsel
-        # 更全面的 GCC 兼容性修复
-        sed -i 's/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security"/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security -Wno-pedantic -Wno-error=pedantic -Wno-c++-compat"/g' build_toolchain
-        # 同时修改 GCC 的 configure 选项，禁用更多警告
-        sed -i 's/--disable-werror/--disable-werror --disable-werror --enable-werror=no/g' build_toolchain
+        # 完全禁用所有警告
+        sed -i 's/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security"/HOSTCFLAGS="$HOSTCFLAGS -w"/g' build_toolchain
         sh build_toolchain > /dev/null
 
     - name: 缓存编译产物
