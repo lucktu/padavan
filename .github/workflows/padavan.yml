@@ -48,17 +48,17 @@ on:
         required: false  
         default: "https://github.com/lucktu/padavan.git"  
       clean_build:  
-        description: 清理以前的编译？  
+        description: 是否清理以前的编译：  
         required: false  
         default: 'yes'  
         type: choice  
         options:  
-          - 'no'  
           - 'yes'  
+          - 'no'  
       release:  
         description: 是否发布到Release？  
-        default: 'no'  
         required: false  
+        default: 'no'  
         type: choice  
         options:  
           - 'no'  
@@ -71,159 +71,89 @@ env:
   
 jobs:  
   build:  
-    runs-on: ubuntu-22.04  
+    name: build  
+    runs-on: ubuntu-latest  
     steps:  
-    - name: Checkout  
-      uses: actions/checkout@v4  
+      - name: 设置环境变量  
+        run: |  
+          echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV  
+          echo "NAME=Padavan-${{ github.event.inputs.production }}" >> $GITHUB_ENV  
         
-    - name: 初始环境设置  
-      run: |  
-        sudo apt-get update  
-        sudo apt-get install -y \  
-          git \  
-          build-essential \  
-          gawk \  
-          pkg-config \  
-          gettext \  
-          automake \  
-          autoconf \  
-          autopoint \  
-          libtool \  
-          bison \  
-          flex \  
-          zlib1g-dev \  
-          libgmp3-dev \  
-          libmpfr-dev \  
-          libmpc-dev \  
-          texinfo \  
-          mc \  
-          libncurses5-dev \  
-          nano \  
-          vim \  
-          gperf \  
-          python-docutils  
-          
-    - name: 设置环境变量  
-      run: |  
-        echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV  
-        echo "NAME=Padavan-${{ github.event.inputs.production }}" >> $GITHUB_ENV  
-        mkdir -p $IMAGES  
-          
-    - name: 缓存工具链  
-      uses: actions/cache@v3  
-      with:  
-        path: |  
-          /opt/rt-n56u/toolchain-mipsel  
-          /opt/rt-n56u/dl  
-        key: toolchain-${{ runner.os }}-${{ hashFiles('**/toolchain-mipsel/*') }}  
-        restore-keys: |  
-          toolchain-${{ runner.os }}-  
-            
-    - name: 缓存编译产物  
-      uses: actions/cache@v3  
-      with:  
-        path: |  
-          /opt/rt-n56u/trunk/src  
-          /opt/rt-n56u/trunk/release/src  
-          /opt/rt-n56u/trunk/images  
-        key: build-${{ github.event.inputs.production }}-${{ github.run_id }}  
-        restore-keys: |  
-          build-${{ github.event.inputs.production }}-  
-            
-    - name: 下载源码  
-      run: |  
-        git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U  
-          
-    - name: 构建工具链（如果缓存未命中）  
-      if: steps.cache-toolchain.outputs.cache-hit != 'true'  
-      run: |  
-        cd $RT_N56U/toolchain-mipsel  
-        # 创建修复补丁  
-        cat > patches/gcc-4.4.7/999-fix-log2-redefinition.patch << 'EOF'  
---- a/gcc/toplev.h  
-+++ b/gcc/toplev.h  
-@@ -187,8 +187,6 @@ extern int flag_fast_math;  
-   
- /* In toplev.c */  
- extern int toplev_main_initialized;  
--extern int floor_log2 (unsigned HOST_WIDE_INT);  
--extern int exact_log2 (unsigned HOST_WIDE_INT);  
-   
- #endif /* ! GCC_TOPLEV_H */  
-EOF  
-        # 完全禁用所有警告  
-        sed -i 's/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security"/HOSTCFLAGS="$HOSTCFLAGS -w"/g' build_toolchain  
-        sh build_toolchain > /dev/null  
-          
-    - name: 清理以前的编译（如果选择）  
-      if: github.event.inputs.clean_build == 'yes'  
-      run: |  
-        cd $RT_N56U/trunk  
-        rm -rf images/ romfs/  
-          
-    - name: 开始编译  
-      run: |  
-        cd $TRUNK  
-        if [ -n "${{ github.event.inputs.production }}" ]; then  
-          if [ "${{ github.event.inputs.production }}" != "" ]; then  
-            echo "开始编译固件：${{ github.event.inputs.production }}"  
-            export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"  
-            if [ ! -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then  
-              echo "设备配置文件不存在"  
-              exit 1  
-            fi  
-            fakeroot ./build_firmware_ci ${{ github.event.inputs.production }}  
-            if [ $? = 0 ]; then  
-              cp -f images/*.trx ${IMAGES}/  
-            else  
-              exit 1  
-            fi  
-          else  
-            echo "没有选择设备型号"  
-            exit 1  
-          fi  
-        else  
-          echo "没有选择设备型号"  
-          exit 1  
-        fi  
-          
-    - name: 收集信息  
-      run: |  
-        cd $IMAGES  
-        echo 完成编译时间： >> readme.txt  
-        TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> readme.txt  
-        echo >> readme.txt  
-        echo 源码信息： >> readme.txt  
-        echo "源码地址: ${{ github.event.inputs.cloneurl }}" >> readme.txt  
-        pushd $RT_N56U  
-        git log -1 --format="%H %s" >> $IMAGES/readme.txt  
-        popd  
-        echo >> readme.txt  
-        echo md5校验值： >> readme.txt  
-        for m in *.trx  
-        do  
-          mv -fv "$m" "${m%.*}_${{ env.DATE }}.trx"  
-        done  
-        md5sum *.trx >> readme.txt || echo  
-        ls -l  
-          
-    - name: 上传固件到Artifacts  
-      if: true  
-      uses: actions/upload-artifact@v4  
-      with:  
-        name: ${{ env.NAME }}  
-        path: ${{ env.IMAGES }}  
-          
-    - name: 发布固件到Release  
-      if: ${{ github.event.inputs.release == 'yes' }}  
-      uses: softprops/action-gh-release@v1  
-      with:  
-        name: ${{ env.NAME }}  
-        tag_name: ${{ env.DATE }}  
-        body_path: ${{ env.IMAGES }}/readme.txt  
-        draft: false  
-        prerelease: false  
-        files: ${{ env.IMAGES }}/*  
-      env:  
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 检出代码  
+        uses: actions/checkout@v4  
         
+      - name: 构建Docker镜像  
+        run: |  
+          docker build -t padavan-builder .  
+        
+      - name: 创建工作目录  
+        run: |  
+          mkdir -p $IMAGES  
+          mkdir -p $RT_N56U  
+        
+      - name: 下载源码  
+        run: |  
+          docker run --rm \  
+            -v ${{ github.workspace }}$RT_N56U:$RT_N56U \  
+            padavan-builder \  
+            git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U  
+        
+      - name: 清理以前的编译  
+        if: ${{ github.event.inputs.clean_build == 'yes' }}  
+        run: |  
+          docker run --rm \  
+            -v ${{ github.workspace }}$RT_N56U:$RT_N56U \  
+            padavan-builder \  
+            sh -c "cd $RT_N56U/trunk && rm -rf images romfs"  
+        
+      - name: 编译固件  
+        run: |  
+          docker run --rm \  
+            -v ${{ github.workspace }}$RT_N56U:$RT_N56U \  
+            -v ${{ github.workspace }}$IMAGES:$IMAGES \  
+            padavan-builder \  
+            sh -c "cd $RT_N56U/trunk && \  
+              export CONFIG_FIRMWARE_PRODUCT_ID='${{ github.event.inputs.production }}' && \  
+              ./build_firmware_ci '${{ github.event.inputs.production }}'"  
+        
+      - name: 整理固件文件  
+        if: ${{ success() }}  
+        run: |  
+          cd $IMAGES  
+          echo 编译完成时间： >> readme.txt  
+          TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> readme.txt  
+          echo >> readme.txt  
+          echo 源码信息： >> readme.txt  
+          echo "源码地址: ${{ github.event.inputs.cloneurl }}" >> readme.txt  
+          docker run --rm \  
+            -v ${{ github.workspace }}$RT_N56U:$RT_N56U \  
+            padavan-builder \  
+            sh -c "cd $RT_N56U && git log -1 --format='%H %s'" >> $IMAGES/readme.txt  
+          echo >> readme.txt  
+          echo md5校验值： >> readme.txt  
+          for m in *.trx  
+          do  
+            mv -fv "$m" "${m%.*}_${{ env.DATE }}.trx"  
+          done  
+          md5sum *.trx >> readme.txt || echo  
+          ls -l  
+        
+      - name: 上传固件到Artifacts  
+        if: true  
+        uses: actions/upload-artifact@v4  
+        with:  
+          name: ${{ env.NAME }}  
+          path: ${{ env.IMAGES }}  
+        
+      - name: 发布固件到Release  
+        if: ${{ github.event.inputs.release == 'yes' }}  
+        uses: softprops/action-gh-release@v1  
+        with:  
+          name: ${{ env.NAME }}  
+          tag_name: ${{ env.DATE }}  
+          body_path: ${{ env.IMAGES }}/readme.txt  
+          draft: false  
+          prerelease: false  
+          files: ${{ env.IMAGES }}/*  
+        env:  
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
