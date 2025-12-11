@@ -45,26 +45,25 @@ on:
           - XY-C1
           - Youku-L1
       cloneurl:
-        description: Set source code address
+        description: 'Set source code address'
         required: false
-        default: "https://github.com/lucktu/padavan.git"
-        type: choice
-        options:
-          - https://github.com/lucktu/padavan.git
-          - https://github.com/hanwckf/rt-n56u.git
-          - https://github.com/padavanonly/rt-n56u.git
-          - https://github.com/immortalwrt/padavan.git
-          - https://github.com/keke1023/Padavan.git
-          - https://github.com/vb1980/Padavan-KVR.git
-          - https://github.com/lmq8267/padavan-KVR.git
+        default: 'https://github.com/lucktu/padavan.git'
       debug_enabled:
         description: 'Run the build with tmate debugging enabled'
         required: false
         default: 'no'
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
       release:
         description: 'Upload to Releases?'
         required: false
         default: 'no'
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
