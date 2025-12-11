@@ -100,6 +100,21 @@ jobs:
       if: steps.cache-toolchain.outputs.cache-hit != 'true'
       run: |
         cd $RT_N56U/toolchain-mipsel
+
+        # 创建修复补丁
+        cat > patches/gcc-4.4.7/999-fix-log2-redefinition.patch << 'EOF'
+--- a/gcc/toplev.h
++++ b/gcc/toplev.h
+@@ -187,8 +187,6 @@ extern int flag_fast_math;
+
+ /* In toplev.c */
+ extern int toplev_main_initialized;
+-extern int floor_log2 (unsigned HOST_WIDE_INT);
+-extern int exact_log2 (unsigned HOST_WIDE_INT);
+
+ #endif /* ! GCC_TOPLEV_H */
+EOF
+
         # 完全禁用所有警告
         sed -i 's/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security"/HOSTCFLAGS="$HOSTCFLAGS -w"/g' build_toolchain
         sh build_toolchain > /dev/null
