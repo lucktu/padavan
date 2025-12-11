@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       production:
-        description: Ñ¡Ôñ¹Ì¼şĞÍºÅ£º
+        description: é€‰æ‹©å›ºä»¶å‹å·ï¼š
         required: false
         default: "KFRouter-S1"
         type: choice
@@ -44,11 +44,11 @@ on:
           - XY-C1
           - Youku-L1
       cloneurl:
-        description: ÉèÖÃÔ´ÂëµØÖ·£º
+        description: è®¾ç½®æºç åœ°å€ï¼š
         required: false
         default: "https://github.com/lucktu/padavan.git"
       release:
-        description: ÊÇ·ñ·¢²¼µ½Release£¿
+        description: æ˜¯å¦å‘å¸ƒåˆ°Releaseï¼Ÿ
         default: 'no'
         required: false
         type: choice
@@ -65,10 +65,10 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-    - name: Í¬²½Ö÷´æ´¢¿â
+    - name: åŒæ­¥ä¸»å­˜å‚¨åº“
       uses: actions/checkout@v4
 
-    - name: ³õÊ¼»·¾³ÉèÖÃ
+    - name: åˆå§‹ç¯å¢ƒè®¾ç½®
       run: |
         sudo apt-get update
         sudo apt install unzip libtool curl gperf gawk flex bison nano xxd \
@@ -76,7 +76,7 @@ jobs:
         texinfo build-essential pkg-config zlib1g-dev libgmp3-dev \
         libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget -y > /dev/null
 
-    - name: »º´æ¹¤¾ßÁ´
+    - name: ç¼“å­˜å·¥å…·é“¾
       uses: actions/cache@v3
       id: cache-toolchain
       with:
@@ -87,24 +87,26 @@ jobs:
         restore-keys: |
           toolchain-${{ runner.os }}-
 
-    - name: ÏÂÔØÔ´Âë
+    - name: ä¸‹è½½æºç 
       run: |
         echo "DATE=$(TZ='Asia/Shanghai' date '+%Y.%m.%d-%H%M')" >> $GITHUB_ENV
         echo "NAME=Padavan-${{ github.event.inputs.production }}" >> $GITHUB_ENV
         mkdir -p $IMAGES
-        echo ¿ªÊ¼±àÒëÊ±¼ä£º >> $IMAGES/readme.txt
+        echo å¼€å§‹ç¼–è¯‘æ—¶é—´ï¼š >> $IMAGES/readme.txt
         TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt
         git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null
 
-    - name: ¹¹½¨¹¤¾ßÁ´£¨Èç¹û»º´æÎ´ÃüÖĞ£©
+    - name: æ„å»ºå·¥å…·é“¾ï¼ˆå¦‚æœç¼“å­˜æœªå‘½ä¸­ï¼‰
       if: steps.cache-toolchain.outputs.cache-hit != 'true'
       run: |
         cd $RT_N56U/toolchain-mipsel
-        # ĞŞ¸´ GCC ¼æÈİĞÔÎÊÌâ - Ìí¼Ó pedantic ¾¯¸æÒÖÖÆ
-        sed -i 's/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security"/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security -Wno-pedantic -Wno-error=pedantic"/g' build_toolchain
+        # æ›´å…¨é¢çš„ GCC å…¼å®¹æ€§ä¿®å¤
+        sed -i 's/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security"/HOSTCFLAGS="$HOSTCFLAGS -Wno-format-security -Wno-pedantic -Wno-error=pedantic -Wno-c++-compat"/g' build_toolchain
+        # åŒæ—¶ä¿®æ”¹ GCC çš„ configure é€‰é¡¹ï¼Œç¦ç”¨æ›´å¤šè­¦å‘Š
+        sed -i 's/--disable-werror/--disable-werror --disable-werror --enable-werror=no/g' build_toolchain
         sh build_toolchain > /dev/null
 
-    - name: »º´æ±àÒë²úÎï
+    - name: ç¼“å­˜ç¼–è¯‘äº§ç‰©
       uses: actions/cache@v3
       id: cache-build
       with:
@@ -116,16 +118,16 @@ jobs:
         restore-keys: |
           build-${{ github.event.inputs.production }}-
 
-    - name: ¿ªÊ¼±àÒë
+    - name: å¼€å§‹ç¼–è¯‘
       run: |
         if [ -n "${{ github.event.inputs.production }}" ]; then
           echo "Building selected device: ${{ github.event.inputs.production }}"
           cd $TRUNK
 
-          # ÉèÖÃÉè±¸ÅäÖÃ
+          # è®¾ç½®è®¾å¤‡é…ç½®
           export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"
 
-          # ¼ì²éÉè±¸ÅäÖÃÊÇ·ñ´æÔÚ
+          # æ£€æŸ¥è®¾å¤‡é…ç½®æ˜¯å¦å­˜åœ¨
           if [ ! -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then
             echo "Device configuration not found for ${{ github.event.inputs.production }}"
             echo "Available devices:"
@@ -133,14 +135,14 @@ jobs:
             exit 1
           fi
 
-          # Èç¹ûÊÇ»º´æ»Ö¸´£¬Ìø¹ıÇåÀí²½Öè
+          # å¦‚æœæ˜¯ç¼“å­˜æ¢å¤ï¼Œè·³è¿‡æ¸…ç†æ­¥éª¤
           if [ "${{ steps.cache-build.outputs.cache-hit }}" = "true" ]; then
             echo "Using cached build, skipping clear_tree"
           else
             sudo ./clear_tree || echo
           fi
 
-          # ±àÒë¹Ì¼ş
+          # ç¼–è¯‘å›ºä»¶
           fakeroot ./build_firmware_ci ${{ github.event.inputs.production }}
 
           if [ $? = 0 ]; then
@@ -153,19 +155,19 @@ jobs:
           exit 1
         fi
 
-    - name: ÊÕ¼¯ĞÅÏ¢
+    - name: æ”¶é›†ä¿¡æ¯
       run: |
         cd $IMAGES
-        echo Íê³É±àÒëÊ±¼ä£º >> readme.txt
+        echo å®Œæˆç¼–è¯‘æ—¶é—´ï¼š >> readme.txt
         TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> readme.txt
         echo >> readme.txt
-        echo Ô´ÂëĞÅÏ¢£º >> readme.txt
-        echo "Ô´ÂëµØÖ·: ${{ github.event.inputs.cloneurl }}" >> readme.txt
+        echo æºç ä¿¡æ¯ï¼š >> readme.txt
+        echo "æºç åœ°å€: ${{ github.event.inputs.cloneurl }}" >> readme.txt
         pushd $RT_N56U
         git log -1 --format="%H %s" >> $IMAGES/readme.txt
         popd
         echo >> readme.txt
-        echo md5Ğ£ÑéÖµ£º >> readme.txt
+        echo md5æ ¡éªŒå€¼ï¼š >> readme.txt
         for m in *.trx
         do
           mv -fv "$m" "${m%.*}_${{ env.DATE }}.trx"
@@ -173,14 +175,14 @@ jobs:
         md5sum *.trx >> readme.txt || echo
         ls -l
 
-    - name: ÉÏ´«¹Ì¼şµ½Artifacts
+    - name: ä¸Šä¼ å›ºä»¶åˆ°Artifacts
       if: true
       uses: actions/upload-artifact@v4
       with:
         name: ${{ env.NAME }}
         path: ${{ env.IMAGES }}
 
-    - name: ·¢²¼¹Ì¼şµ½Release
+    - name: å‘å¸ƒå›ºä»¶åˆ°Release
       if: ${{ github.event.inputs.release == 'yes' }}
       uses: softprops/action-gh-release@v1
       with:
