@@ -95,13 +95,13 @@ jobs:
         echo 开始编译时间： >> $IMAGES/readme.txt  
         TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S' >> $IMAGES/readme.txt  
         git clone --depth=1 ${{ github.event.inputs.cloneurl }} $RT_N56U > /dev/null  
-          
+      
     - name: 构建工具链（如果缓存未命中）  
       if: steps.cache-toolchain.outputs.cache-hit != 'true'  
       run: |  
         cd $RT_N56U/toolchain-mipsel  
           
-        # 创建修复补丁 - 注意EOF必须在行首  
+        # 创建修复补丁  
         cat > patches/gcc-4.4.7/999-fix-log2-redefinition.patch << 'EOF'  
 --- a/gcc/toplev.h  
 +++ b/gcc/toplev.h  
@@ -130,16 +130,16 @@ EOF
         key: build-${{ github.event.inputs.production }}-${{ github.run_id }}  
         restore-keys: |  
           build-${{ github.event.inputs.production }}-  
-            
+  
     - name: 开始编译  
       run: |  
         if [ -n "${{ github.event.inputs.production }}" ]; then  
           echo "Building selected device: ${{ github.event.inputs.production }}"  
           cd $TRUNK  
-            
+  
           # 设置设备配置  
           export CONFIG_FIRMWARE_PRODUCT_ID="${{ github.event.inputs.production }}"  
-            
+  
           # 检查设备配置是否存在  
           if [ ! -f "configs/boards/${{ github.event.inputs.production }}/board.h" ]; then  
             echo "Device configuration not found for ${{ github.event.inputs.production }}"  
